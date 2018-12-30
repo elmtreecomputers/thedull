@@ -1,11 +1,60 @@
+
 require 'pp'
 require_relative 'room'
 require_relative 'player'
 require_relative 'thing'
-
+require_relative 'food'
 require_relative 'enemy'
 require 'colorize'
 require 'colorized_string'
+require 'curses'
+
+def welcome()
+	Curses.init_screen
+	Curses.start_color
+	Curses.init_pair(1,Curses::COLOR_BLUE,Curses::COLOR_BLACK)
+	begin
+  		win = Curses.stdscr
+  		x = win.maxx / 2
+  		y = win.maxy / 2
+  		win.setpos(y-10, x-50)
+  	
+  		win.attrset(Curses.color_pair(1)|Curses::A_BOLD)
+  		
+  		win.addstr("The DULL")
+  		win.setpos(y-8, x-50)
+  		sleep 1
+  		win.addstr("Command words: use, go, look, get, drop, talk, fight")
+  		win.refresh
+  		win.getch
+	ensure
+  		Curses.close_screen
+	end
+end
+
+
+def victory()
+	Curses.init_screen
+	Curses.start_color
+	Curses.init_pair(1,Curses::COLOR_BLUE,Curses::COLOR_BLACK)
+	begin
+  		win = Curses.stdscr
+  		x = win.maxx / 2
+  		y = win.maxy / 2
+  		win.setpos(y-10, x-50)
+  	
+  		win.attrset(Curses.color_pair(1)|Curses::A_BOLD)
+  		
+  		win.addstr("VICTORIOUS!")
+  		win.setpos(y-8, x-50)
+  		sleep 1
+  		win.addstr("Vrooooom")
+  		win.refresh
+  		win.getch
+	ensure
+  		Curses.close_screen
+	end
+end
 
 '''
 def randomise(direction)    
@@ -37,8 +86,9 @@ $key = Thing.new("key", "Small misterious key", "turn it", true)
 $hammer = Thing.new("hammer", "Wooden one, strong enough to knock plastic nails", "swing it... bang!", true)
 $map = Thing.new("map", "Dusty local map", "locate your self", true)
 $bed = Thing.new("bed", "Comfy spring bed", "you rest well for few hours", false)
-
+$motor = Thing.new("motorcycle", "Getaway motor cycle", "escape to another town", false)
 $things = Array.new
+$food = Food.new("banana", "simple plain old yellow banana", "satisfy your hunger", true)
 
 '''
 def place_a_thing()
@@ -64,6 +114,7 @@ $maze_max_col = 5
 
 $therooms = Array.new
 
+$victorious = false
 
 $a = []
 
@@ -188,7 +239,7 @@ def lookaround()
             print(pre_item + item.get_name.yellow + post_item)
 
         end
-        puts(" on its floor.")
+        puts(" nearby.")
     else
         puts("You see nothing special here.")
     end
@@ -211,6 +262,16 @@ def inspectitem(result)
             #puts "There is no such thing nearby."
     return ""
   end
+end
+
+def dropitem(item)
+  if ($player.get_objects.has_key?(item))
+    $therooms[$player.get_room_id].add_object($player.get_object(item))
+	$player.remove_object(item)
+    puts "You dropped the #{item}."
+  else
+    puts "You haven't got a #{item}."
+  end  
 end
 
 def pickitem(result)
@@ -310,7 +371,7 @@ def go(dir)
         #print "Loc", $player.get_loc
 	    puts ("Going #{dir} into a #{$therooms[result].get_name}.".green)
       sleep(1)
-        #system("clear")
+    #  system("clear")
 
       if(dir =="south")
         if($player.get_row<$maze_row-1)
@@ -331,7 +392,7 @@ def go(dir)
       end
       $current_room = $a[$player.get_row][$player.get_col]
 	    $player.set_room_id($current_room.get_id)
-
+      topscreen(true)
       print ("You are now in #{$current_room.get_desc}.")
       $player.set_stamina($player.get_stamina()-3)
       lookaround()
@@ -371,7 +432,20 @@ end
 
 def use(i)
     list = $player.get_objects
-    if (i=="bed" and $current_room.get_name=="bed room")
+    if($player.get_object(i).class==Food)
+    	puts "You eat #{$player.get_object(i).get_name} until there's no more..."
+    	$player.set_stamina($player.get_stamina + $player.get_object(i).get_energy)
+    	$player.remove_object($player.get_object(i).get_name)
+      sleep 1
+      topscreen(true)
+      puts "and regained some energy."
+    elsif(i == "motorcycle" and $player.got_object('key') and $current_room.got_object(i))
+      puts "You hopped onto the motorcycle and inserted the key..."
+      puts "VROOOM"
+      sleep 1
+      puts "In no time you escaped this town... into the NEXT ADVENTURE OF THE DULL"
+      $victorious = true
+    elsif (i == "bed" and $current_room.got_object(i) and $current_room.get_name=="bed room")
         if($stamina_flag)
             puts "Sleeping..."
             stamina_point = 25
@@ -390,7 +464,7 @@ def use(i)
             $steps = 0 
             puts "Energised!".green
             sleep(1)
-            topscreen()
+            topscreen(true)
             
         else
             puts "You are too busy for that!".light_red
@@ -415,7 +489,9 @@ def print_map()
       r = $a[row][col].get_name
 		  a =""
 		  if($a[row][col].get_doors()["west"] ==-2)
-        print "|"
+        print "|".ljust(5)
+      else
+        print "".ljust(5)
       end
 
 	    if($a[row][col].get_doors()["north"] ==-1 or $a[row][col].get_doors()["north"] ==-2)
@@ -432,24 +508,51 @@ def print_map()
 		    a += "-S-"
       end
 
-	    print a.center(20)
+	    print a.center(10)
 	    if($a[row][col].get_doors()["east"] ==-2)
-        print "|"
+        print "|".rjust(5)
+      else
+        print "".rjust(5)
       end
 	  end
+  end
+  puts
+end
+
+def replace_void()
+  $therooms.each do|a_room|
+    void_number = 0
+    doors = []
+    #pp a_room
+    if a_room.get_name!="void"
+      a_room.get_doors.each do |key,void|
+        if $therooms[void].get_name=="void"
+          void_number+=1
+     #     print ("PUSHING KEY #{key}")
+          doors.push(void)
+        end
+      end
+    end
+   # pp a_room.get_doors
+    if void_number>1
+      r = doors.sample
+      $therooms[r].set_name("new road")
+      $therooms[r].set_desc("the long and winding road")
+      pp "replacing void with a road"
+    end
   end
 end
 
 def prepare_world()
     index = 0 
-    $things = [$coin, $book, $key, $hammer, $map].shuffle
+    $things = [$coin, $book, $hammer, $map].shuffle
     $valid_rooms = [$bedroom, $shop, $tunnel, $garden, $campus].shuffle
 
     $bedroom.add_object($bed)
 
     srng = Random.new
     $things.each do |thing|
-        $valid_rooms[srng.rand($valid_rooms.length)].add_object(thing)
+        $valid_rooms[srng.rand($valid_rooms.length-1)].add_object(thing)
     end
 
     maze_random = Random.new
@@ -458,7 +561,7 @@ def prepare_world()
     $maze_col = maze_random.rand(3..$maze_max_col)
 
     maze_size = $maze_row * $maze_col
-    puts " maze = #{$maze_size} rooms = #{$valid_rooms.length}"
+    #puts " maze = #{$maze_size} rooms = #{$valid_rooms.length}"
     void_random = Random.new
     voids_number = 2
     if(maze_size>15)
@@ -469,11 +572,7 @@ def prepare_world()
         voids_number = 1
     end 
     roads_number = maze_size - $valid_rooms.length - voids_number
-    puts " roads = #{$roads_number}"
-
-    voids_number.times do 
-        $therooms.push(Room.new("void", "no go zone"))
-    end
+    #puts " roads = #{$roads_number}"
 
     roads_number.times do 
         $therooms.push(Room.new("road", "the long and winding road"))
@@ -483,14 +582,21 @@ def prepare_world()
         $therooms.push(room) 
     end
 
+    srng = Random.new
+    $therooms[srng.rand($therooms.length-1)].add_object($food)
+
+    voids_number.times do 
+        $therooms.push(Room.new("void", "no go zone"))
+    end
+
     $therooms = $therooms.shuffle
     $a = Array.new($maze_row) { Array.new($maze_col, 0) }
 
     $maze_row.times do |row|
         $maze_col.times do |column|
-	    $therooms[index].set_id(index)
-            $a[row][column] = $therooms[index]
-            index+=1
+    	    $therooms[index].set_id(index)
+          $a[row][column] = $therooms[index]
+          index+=1
         end
     end
 
@@ -503,44 +609,137 @@ def prepare_world()
         end
 #        print("\n======================================\n")
     end
+    
+    replace_void
     $therooms.each do |r|
-      p r.get_id
-	    p r.get_name
-	    p r.get_doors
+    #  p r.get_id
+	  #  p r.get_name
+	  #  p r.get_doors
 
 	    doors=[]
 	    r.get_doors.each do | key, door |
-		    if door!=-1 and $therooms[door].get_name !="void"
+		    if door!=-2 and door!=-1 and r.get_name !="void" and $therooms[door].get_name!="void"
 			  #puts "#{key} => #{door}"
 			    doors.push(key)
 		    end
 	    end
-	    if doors.length>2
+
+     # pp doors
+	    if doors.length>3
+        #doors.push("nothing") #force an opportunity not to add a blocked door
+        #doors.push("nothing")
         s = doors.sample
 	      door = r.get_doors()[s]
-	      r.update_door(s,-2)
-        print ("randomise door to update ")
+      #  print ("randomise door to update ")
         if s =="north"
           if($therooms[door].get_name!="void")
+	          r.update_door(s,-2)
             $therooms[door].update_door("south",-2)
           end
         elsif s =="south"
           if($therooms[door].get_name!="void")
+	          r.update_door(s,-2)
             $therooms[door].update_door("north",-2)
           end
         elsif s =="west"
           if($therooms[door].get_name!="void")
+	          r.update_door(s,-2)
             $therooms[door].update_door("east", -2)
           end
         elsif s =="east"
           if($therooms[door].get_name!="void")
             $therooms[door].update_door("west", -2)
+	          r.update_door(s,-2)
           end
         end
 
-	      pp(r.get_doors)
+	     # pp(r.get_doors)
 	    end
     end
+end
+
+def hit(actor)
+  impact = 0
+  if $player.get_room_id == $enemy.get_room_id and $enemy.get_name.downcase==actor.downcase
+    if ($enemy.get_stamina>0)
+      if ($player.get_objects.has_key?("hammer"))
+        puts "You pull out that hammer of yours and swing it on #{$enemy.get_name}'s head!"
+        limit = 2
+        srng = Random.new
+        impact = srng.rand(35..60)
+        puts impact
+      else
+        puts "You got no weapon so you aim to hit #{$enemy.get_name} with your bare knuckles..."
+        limit = 7  
+        srng = Random.new
+        impact = srng.rand(5..20)
+        puts impact
+ 
+      end
+      srng = Random.new
+      chance = srng.rand(1..10)
+      puts chance
+      if chance>=limit
+        sleep 1
+        if(impact >40)
+          puts "You hit him hard, he gets dizzy..."
+        else
+          puts "You hit your target, but he barely feels any pain"
+        end
+      else
+        sleep 1
+        puts "And you miss miserably..."
+      end
+      sleep 1
+      $enemy.set_stamina($enemy.get_stamina-impact)
+      if($enemy.get_stamina<=0)
+        puts "KNOCKED OUT and ambulance sirense could be heard from a distant, and you decided to flee the scene."
+        obj = $enemy.get_object("key")
+        $enemy.remove_object("key")
+        $current_room.add_object(obj)
+        lookaround()
+        roads = []
+        $therooms.each do |r|
+          if(r.get_name=="road")
+            roads.push(r.get_id)
+          end
+        end
+    
+        $therooms[roads.sample].add_object($motor)
+
+        
+      else
+        puts "He goes back up! And attack you with his knife!"
+        sleep 1
+        srng = Random.new
+        impact = srng.rand(10..50)
+        puts impact
+        srng = Random.new
+        chance = srng.rand(1..10)
+        puts chance
+        if chance>4
+          if(impact>1 and impact <20)
+            puts "The knice slightly cuts your skin..."
+          else
+            puts "He cuts you deep, blood splattered everywhere"
+          end
+          $player.set_stamina($player.get_stamina-impact)
+        else
+          puts "You dodged away and avoided his knife"
+        end
+
+        sleep 2
+        topscreen(true)
+      end
+    elsif $player.get_stamina <=0
+      puts "You were fatally stabbed. GAME OVER"
+    else
+      puts "He is already down. You better run before police comes!"
+    end
+
+  else
+    puts "You practice against your own shadow... sadly."
+  end
 end
 
 class String
@@ -569,8 +768,11 @@ class String
   def reverse_color; "\e[7m#{self}\e[27m" end
 end
 
-def topscreen()
-    puts `clear`
+def topscreen(c)
+    if(c==true)
+      puts `clear`
+    end
+    print "#{$therooms[$player.get_room_id].get_name.upcase}"
     print "Stamina:#{$player.get_stamina()}%".rjust(90).light_blue
     puts " Score:#{$player.get_score()}".light_blue
     puts ""
@@ -578,124 +780,145 @@ end
 
 def play()
     #system('cls')
-    #puts `clear`
-    puts "THE DULL".center(100).white.on_blue.bold
-    puts "A 2018 Ruby text-based adventure by Dipto Pratyaksa".center(100).white.on_blue
-    puts ""
+  puts `clear`
+  puts "THE DULL".center(100).white.on_blue.bold
+  puts "A 2018 Ruby text-based adventure by Dipto Pratyaksa".center(100).white.on_blue
+  puts ""
     #ColorizedString.color_samples
 #pp a
-srng = Random.new
-n = c =  "void"
+  srng = Random.new
+  n = c =  "void"
  
-while n=="void"
+  while n=="void"
     pc = srng.rand(0..($maze_col-1))
     pr = srng.rand(0..($maze_row-1))
     $current_room = $a[pr][pc]   
     n = $current_room.get_name 
     $player = Player.new("Dipto", [pr, pc])
     $player.set_room_id($current_room.get_id)
-end
+  end
 
-pp $player
+  #pp $player
 
 
-while c=="void"
+  while c=="void"
     ec = srng.rand(0..($maze_col-1))
     er = srng.rand(0..($maze_row-1))
     $enemy_room = $a[er][ec]
     c = $enemy_room.get_name
-    $enemy = Enemy.new("The Joker", [er, ec])
-end
+    $enemy = Player.new("Bandito", [er, ec])
+    $enemy.set_room_id($enemy_room.get_id)
+  end
+
+  $enemy.add_object("key", $key)
 
 
+  #pp $enemy
+  #puts $current_room.get_name.upcase
+  topscreen(false)
+  puts
+  print "You are in #{$current_room.get_desc}. "
+  lookaround()
 
-#pp $enemy
-
-print "You are in #{$current_room.get_desc}. "
-lookaround()
-
-e = ""
-if($player.get_row == $enemy.get_row and $player.get_col == $enemy.get_col)
-    puts "ENEMY is HERE! You will DIE!".red.blink
-end
+  e = ""
+  if($player.get_room_id == $enemy.get_room_id and $enemy.get_stamina>0)
+    puts "#{$enemy.get_name} Your ARCH ENEMY is HERE! You will DIE!".red.blink
+  end
 
 
-prompt = "\n> "
-print "What do you want to do?"
-print prompt
+  prompt = "\n> "
+  print "What do you want to do?"
+  print prompt
 
 #pp $player
 #pp $enemy
-$current_room = $a[$player.get_row][$player.get_col]
+  $current_room = $a[$player.get_row][$player.get_col]
 
-while user_input = $stdin.gets.chomp # loop while getting user input
-  topscreen()
-  param = user_input.partition(" ")[2]
-  case user_input.partition(" ")[0]
-  when "where am I"
-    puts("You are in #{$current_room.get_name}.")
-  when "use"
-    use(param)
-  when "inventory", "items", "objects" , "pocket"
-    inventory()
-  when "take", "get", "pick"
-    pickitem(param)
-  when "inspect" , "examine"
-    inspectitem(param)
-  when "view", "see" 
-    lookaround()
-  when "look"
-    system('cls')
-    
-
-    if param !=""
-        if param == "north" || param == "west" ||param == "east" ||param == "south"
+  while user_input = $stdin.gets.chomp # loop while getting user input
+    topscreen(true)
+    param = user_input.partition(" ")[2]
+    case user_input.partition(" ")[0]
+      when "where am I"
+        puts("You are in #{$current_room.get_name}.")
+      when "use"
+        use(param)
+        if($victorious)
+          victory()
+          break
+        end
+      when "inventory", "items", "objects" , "pocket"
+        inventory()
+      when "take", "get", "pick"
+        pickitem(param)
+      when "inspect" , "examine"
+        inspectitem(param)
+      when "view", "see" 
+        lookaround()
+      when "hit", "fight"
+        hit(param)
+        
+        if($player.get_room_id == $enemy.get_room_id and $enemy.get_stamina>0)
+          e=  "#{$enemy.get_name} Your ARCH ENEMY is HERE! You will DIE!".red.blink
+        else
+          e = ""
+        end
+         if($player.get_stamina<0)
+          puts "Such is life..."
+          break
+        end
+      when "look"
+        system('cls')
+        if param !=""
+          if param == "north" || param == "west" ||param == "east" ||param == "south"
             result = $current_room.get_doors[param]
-            if result == "" || result == "void"
+            if result == "" || $therooms[result].get_name == "void"
                 result  = "blocking wall. You can't look through"
             end
-            puts "Looking #{user_input.partition(" ")[2]} you see #{result}.".green
-        elsif param == "around"
+            puts "Looking #{user_input.partition(" ")[2]} you see #{$therooms[result].get_name}.".green
+          elsif param == "around"
             lookaround()
-        elsif inspectitem(param)==""
+          elsif inspectitem(param)==""
             puts "There's not such thing nearby".light_red
 
-        end
-    else
-        lookaround()
+          end
+        else
+          lookaround()
         #puts "The #{param} is looking back at you."
-    end
+        end
 #    break # make sure to break so you don't ask again
-  when "go"
+      when "go"
 
-    go(param)
-    print_map()
-    if($player.get_col == $enemy.get_col and $player.get_col == $enemy.get_col)
-        e =  "\nENEMY is HERE! You will DIE!".red.blink
-    else
-        e = ""
-    end
-    if($player.get_stamina >25 && $player.get_stamina <50)
-        puts "You feel a little exhausted...".light_red
-    elsif($player.get_stamina >0 && $player.get_stamina <=25)
-        puts "Get rest, eat or die. DO SOMETHING!".red.blink
-    elsif ($player.get_stamina <=0)
-        puts "You become so weak and exhausted, and DIE of thirst.".on_red
-        puts "Total score : #{$player.get_score}"
-        puts "Goodbye loser!"
-        break
-    end
+        go(param)
+        print_map()
+        if($player.get_room_id == $enemy.get_room_id and $enemy.get_stamina>0)
+          e=  "#{$enemy.get_name} Your ARCH ENEMY is HERE! You will DIE!".red.blink
+        else
+          e = ""
+        end
+        if($player.get_stamina >25 && $player.get_stamina <50)
+          puts "You feel a little exhausted...".light_red
+        elsif($player.get_stamina >0 && $player.get_stamina <=25)
+          puts "Get rest, eat or die. DO SOMETHING!".red.blink
+        elsif ($player.get_stamina <=0)
+          puts "You become so weak and exhausted, and DIE of thirst.".on_red
+          puts "Total score : #{$player.get_score}"
+          puts "Goodbye loser!"
+          break
+      end
 #   
     #    break # make sure to break so you don't ask again
-  when "exit"
-    break
-  else
-    puts "Hmmm I don't quite understand that".light_red
-  end
-  print e + prompt
-end
+      when "drop"
+        dropitem(param)
+      when "exit"
+        break
+      else
+        puts "Hmmm I don't quite understand that".light_red
+      end
+      print e + prompt
+    end
 end
 
 prepare_world
+welcome
 play 
 

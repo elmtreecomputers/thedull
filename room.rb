@@ -4,18 +4,18 @@ class Room
     @@no_of_customers = 0
     def initialize(name, desc)
         #@room_loc = Array.new([loc_x, loc_y])
-	@room_id = -1       
-        @room_name = name
-        @room_desc = desc
-        @room_doors = {"north"=>-1,"east"=>-1,"south"=>-1,"west"=>-1,"up"=>-1, "down"=>-1}
-        @room_objects = Array.new
+	    @room_id = -1       
+      @room_name = name
+      @room_desc = desc
+      @room_doors = {"north"=>-1,"east"=>-1,"south"=>-1,"west"=>-1,"up"=>-1, "down"=>-1}
+      @room_objects = Array.new
     end
 
     def set_id(id)
 	@room_id = id
     end 
     def get_id()
-	return @room_id
+    	return @room_id
     end
     def display_details()
         #puts "room loc #@room_loc"
@@ -27,6 +27,14 @@ class Room
         #if(@room_doors[direction]=="" and !@room_doors.has_value?(room))
            @room_doors[direction] = room
         #end
+    end
+
+    def set_name(n)
+      @room_name = n
+    end
+
+    def set_desc(d)
+      @room_desc = d
     end
 
     def get_name()
@@ -53,6 +61,15 @@ class Room
 
     def remove_object(obj)
         @room_objects.delete(obj)
+    end
+
+    def got_object(obj)
+      @room_objects.each do | item|
+        if(item.get_name==obj)
+          return true
+        end
+      end
+      return false
     end
 
     def set_objects(objs)

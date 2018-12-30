@@ -64,8 +64,12 @@ class Enemy
         @player_objects.store(key,object)
     end
 
-    def remove_objects(key)
-        @player_objects.delete(object)
+    def get_object(key)
+      return @player_objects[key]
+    end
+
+    def remove_object(key)
+        @player_objects.delete(key)
     end
 
     def get_row()
